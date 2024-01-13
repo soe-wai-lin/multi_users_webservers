@@ -1,0 +1,48 @@
+---
+- name: Create users acc
+  ansible.builtin.user:
+    name: "{{ item['username'] }}"
+    state: present
+  loop: "{{ web_developers }}"
+
+- name: Give student access to all acc
+  ansible.posix.authorized_key:
+    user: "{{ item['username'] }}"
+    state: present
+    key: "{{ lookup('file', 'home/student/role-review/'+ item['username'] + '.key.pub') }}"
+  loop: "{{ web_developers }}"
+
+- name: Create content directory
+  ansible.builtin.file:
+    path: /srv/{{ item['username'] }}/www
+    state: directory
+    owner: "{{ item['username'] }}"
+  loop: "{{ web_developers }}"
+
+- name: Create skeleton index.html if needed
+  ansible.builtin.copy:
+    content: "This is index.html for user: {{ item['name'] }} ({{ item['username'] }})\n"
+    dest: /src/{{ item['username'] }}/www/index.html
+    force: no
+    owner: "{{ item['username'] }}"
+    group: root
+    mode: 0644
+  loop: "{{ web_developers }}"
+
+- name: Set firewalld port
+  ansible.posix.firewalld:
+    port: "{{ item['user_port'] }}/tcp"
+    permanent: true
+    state: enabled
+  loop: "{{ web_developers }}"
+  notify: restart firewalld
+
+- name: Copy Per_developer config files
+  ansible.builtin.template:
+    src: developer.conf.j2
+    dest: "/etc/httpd/conf.d/developer_{{ item['username'] }}.conf"
+    owner: root
+    group: root
+    mode: 0644
+  loop: "{{ web_developers }}"
+  notify: restart apache
